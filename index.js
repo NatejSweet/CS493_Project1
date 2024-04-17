@@ -281,7 +281,7 @@ app.get("/businesses/:Id/reviews", (req, res) => {
   res.status(200).send({ reviews: reviews });
 });
 
-app.get("/businesses/:Id/photos", (req, res) => {
+app.get("/businesses/:id/photos", (req, res) => {
   let businessId = req.params.Id;
   //get all photos for business
   //get from database
