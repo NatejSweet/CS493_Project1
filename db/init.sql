@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS 'images' (
   'id' int(11) NOT NULL AUTO_INCREMENT,
   'businessId' int(11) NOT NULL,
   'userId' int(11) NOT NULL,
-  'photo'  LONGTEXT NOT NULL,
+  'photo'  VARCHAR(24) NOT NULL,
   'caption' varchar(255) NOT NULL,
   PRIMARY KEY ('id')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
