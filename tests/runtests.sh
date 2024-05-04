@@ -58,9 +58,6 @@ curl -X PUT \
     -d '{"name": "New Business", "address": "123 Main St", "city": "Veneta", "state":"Oregon", "zip":"97487"}' \
     http://localhost:8000/businesses/1
 
-status 'DELETE a business should return no content'
-curl -X DELETE http://localhost:8000/businesses/1
-
 status 'GET all businesses should return a business'
 curl http://localhost:8000/businesses
 printf "\n"
@@ -68,6 +65,11 @@ printf "\n"
 status 'GET a business by id should return the previosly created business'
 curl http://localhost:8000/businesses/1
 printf "\n"
+
+
+status 'DELETE a business should return no content'
+curl -X DELETE http://localhost:8000/businesses/1
+
 
 status 'POST a new review should return success'
 curl -v POST \
@@ -124,7 +126,7 @@ status 'GET all businesses owned by a user by id should return at least one busi
 curl http://localhost:8000/users/1/businesses
 printf "\n"
 
-status 'GET all photos for a user by id should return at leas one photo'
+status 'GET all photos for a user by id should return at least one photo'
 curl http://localhost:8000/users/1/photos
 printf "\n"
 

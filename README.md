@@ -2,6 +2,14 @@
 
 # Backend API calls
 
+## Remove the Containers
+
+        docker compose down
+
+## Build the Containers
+
+        docker compose up
+
 ## Creating a Business
 
     Request:

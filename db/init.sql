@@ -1,3 +1,8 @@
+DROP TABLE IF EXISTS `users`;
+DROP TABLE IF EXISTS `businesses`;
+DROP TABLE IF EXISTS `reviews`;
+DROP TABLE IF EXISTS `images`;
+
 CREATE TABLE IF NOT EXISTS `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
