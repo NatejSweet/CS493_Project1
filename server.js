@@ -9,7 +9,7 @@ const port = process.env.PORT;
 const mysql = require("mysql2/promise");
 const mysqlHost = process.env.MYSQL_HOST || "localhost";
 const mysqlPort = process.env.MYSQL_PORT || "3306";
-const mysqlDB = process.env.MYSQL_DB;
+const mysqlDB = process.env.MYSQL_DATABASE;
 const mysqlUser = process.env.MYSQL_USER;
 const mysqlPassword = process.env.MYSQL_PASSWORD;
 const maxMySQLConnections = 10;
@@ -92,33 +92,44 @@ function pageinate(pageNumber, pageSize, array) {
   return array.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
 }
 
-app.post("/createAccount", async (req, res) => {
+app.post("/users", async (req, res) => {
   let email = req.body.email;
   let password = req.body.password;
-  let [rows, fields] = await mysqlPool.query(
-    "SELECT email FROM users WHERE email = ?",
-    [email]
-  );
-  if (rows.length > 0) {
-    res.status(409).send("Email already exists");
-  } else {
-    bcrypt.hash(password, saltRounds, async (err, hash) => {
-      if (err) {
-        res.status(500).send("Failed to hash password");
-      } else {
-        let [result] = await mysqlPool.query(
-          "INSERT INTO users (email, password) VALUES (?, ?)",
-          [email, hash]
-        );
-        let userId = result.insertId;
-        let token = jwt.sign({ userId: userId }, process.env.JWT_SECRET);
-        res.status(201).send({ token: token });
-      }
-    });
+  let name = req.body.name;
+  try {
+    let [rows, fields] = await mysqlPool.query(
+      "SELECT email FROM users WHERE email = ?",
+      [email]
+    );
+    if (rows.length > 0) {
+      res.status(409).send("Email already exists");
+    } else {
+      bcrypt.hash(password, saltRounds, async (err, hash) => {
+        if (err) {
+          res.status(500).send("Failed to hash password");
+        } else {
+          try {
+            let [result] = await mysqlPool.query(
+              "INSERT INTO users (email, password, name) VALUES (?, ?, ?)",
+              [email, hash, name]
+            );
+            let userId = result.insertId;
+            let token = jwt.sign({ userId: userId }, process.env.JWT_SECRET);
+            res.status(201).send({ token: token });
+          } catch (err) {
+            console.error(err);
+            res.status(500).send("Failed to insert user into database");
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Failed to query database");
   }
 });
 
-app.post("/login", async (req, res) => {
+app.post("/users/login", async (req, res) => {
   let email = req.body.email;
   let password = req.body.password;
   await mysqlPool.query(
@@ -141,6 +152,23 @@ app.post("/login", async (req, res) => {
             res.status(401).send("Invalid password");
           }
         });
+      }
+    }
+  );
+});
+
+app.get("/users/:Id", (req, res) => {
+  let userId = req.headers.authorization.userId;
+  mysqlPool.query(
+    "SELECT name, email FROM users WHERE Id = ?",
+    [userId],
+    (err, results) => {
+      if (err) {
+        res.status(500).send("Internal server error");
+      } else if (results.length == 0) {
+        res.status(404).send("User not found");
+      } else {
+        res.status(200).send({ user: results[0] });
       }
     }
   );

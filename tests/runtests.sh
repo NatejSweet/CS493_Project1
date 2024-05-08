@@ -22,17 +22,30 @@ status() {
 
 status "Running tests\n"
 status "Creating Account\n"
-curl -v POST \
+curl -v -X POST \
     -H 'Content-Type: application/json' \
-    -d '{"username": "test", "password": "test", "email": ""}' \
-    http://localhost:8000/createAccount
+    -d '{"email": "test@example.com", "password": "testpassword", "name": "test"}' \
+    http://localhost:8000/users
 
 status "Logging in\n"
-TOKEN=$(curl -s -X POST \
+response=$(curl -s -X POST \
     -H 'Content-Type: application/json' \
     -d '{"username": "test", "password": "test"}' \
-    http://localhost:8000/login | jq -r '.token')
+    http://localhost:8000/users/login)
+
+echo "Response: $response"
+
+TOKEN=$(echo $response | jq -r '.token')
+echo "Token: $token"
+if [ -n "$TOKEN" ]; then
+    echo "Login successful\n"
+else
+    echo "Login failed\n"
+fi
     
+status "Getting user by id(0), should return the user we just created"
+curl http://localhost:8000/users/0
+
 status 'POST a new business should return success' 
 curl -v POST \
     -H 'Content-Type: application/json' \
