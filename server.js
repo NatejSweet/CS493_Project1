@@ -27,6 +27,10 @@ const jwt = require("jsonwebtoken");
 //password ecryption
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
+//Image handling (multer, sharp)
+const multer = require("multer");
+const upload = multer();
+const sharp = require("sharp");
 //database init
 const initDb = async () => {
   const sqlQueries = [
@@ -70,7 +74,7 @@ const initDb = async () => {
       \`id\` int(11) NOT NULL AUTO_INCREMENT,
       \`businessId\` int(11) NOT NULL,
       \`userId\` int(11) NOT NULL,
-      \`photo\` VARCHAR(24) NOT NULL,
+      \`photo\` MEDIUMBLOB NOT NULL,
       \`caption\` varchar(255) NOT NULL,
       PRIMARY KEY (\`id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;`,
@@ -114,6 +118,7 @@ const businessDefiner = {
 
 const imageDefiner = {
   businessId: 1,
+  userId: 1,
   photo: 1,
   caption: 1,
 };
@@ -157,6 +162,12 @@ function pageinate(pageNumber, pageSize, array) {
   return array.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
 }
 
+function getUserIdFromToken(authorization) {
+  let token = authorization.split(" ")[1];
+  let decoded = jwt.verify(token, process.env.JWT_SECRET);
+  return decoded.userId;
+}
+
 app.post("/users", async (req, res) => {
   let email = req.body.email;
   let password = req.body.password;
@@ -195,7 +206,6 @@ app.post("/users", async (req, res) => {
 });
 
 app.post("/users/login", async (req, res) => {
-  console.log("logging in");
   let email = req.body.email;
   let password = req.body.password;
   let [rows, fields] = await mysqlPool.query(
@@ -206,12 +216,10 @@ app.post("/users/login", async (req, res) => {
     res.status(401).send("Invalid email");
   } else {
     let user = rows[0];
-    console.log("User found:", user.id);
     bcrypt.compare(password, user.password, (err, result) => {
       if (err) {
         res.status(500).send("Internal server error");
       } else if (result) {
-        console.log("User logged in:", user.id);
         let token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
         res.status(200).send({ token: token });
       } else {
@@ -227,9 +235,7 @@ app.get("/users/:id", async (req, res) => {
     res.status(401).send("Unauthorized");
     return;
   }
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let tokenUserId = decoded.userId;
+  let tokenUserId = getUserIdFromToken(req.headers.authorization);
   if (userId != tokenUserId) {
     res.status(403).send("Forbidden");
     return;
@@ -256,9 +262,7 @@ app.post("/businesses", async (req, res) => {
     res.status(401).send("Unauthorized");
     return;
   }
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let userId = decoded.userId;
+  let userId = getUserIdFromToken(req.headers.authorization);
   //creating a business
   let business = {
     name: req.body.name,
@@ -306,9 +310,7 @@ app.put("/businesses/:Id", (req, res) => {
     return;
   }
   let id = req.params.Id;
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let userId = decoded.userId;
+  let userId = getUserIdFromToken(req.headers.authorization);
   //updating a business
   let business = {
     name: req.body.name,
@@ -357,9 +359,7 @@ app.delete("/businesses/:Id", async (req, res) => {
     res.status(401).send("Unauthorized");
     return;
   }
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let userId = decoded.userId;
+  let userId = getUserIdFromToken(req.headers.authorization);
   let businessId = req.params.Id;
   try {
     let results = await mysqlPool.query(
@@ -422,9 +422,7 @@ app.post("/reviews", async (req, res) => {
     return;
   }
   //creating a review
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let userId = decoded.userId;
+  let userId = getUserIdFromToken(req.headers.authorization);
   let review = {
     id: -1,
     businessId: req.body.businessId,
@@ -432,7 +430,6 @@ app.post("/reviews", async (req, res) => {
     cost: req.body.cost,
     writtenReview: req.body.writtenReview,
   };
-  console.log(review);
   if (!validateReview(review)) {
     res.status(400).send("Invalid review");
     return;
@@ -465,9 +462,7 @@ app.put("/reviews/:id", async (req, res) => {
     res.status(401).send("Unauthorized");
     return;
   }
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let userId = decoded.userId;
+  let userId = getUserIdFromToken(req.headers.authorization);
   //updating a review
   let review = {
     id: req.params.id,
@@ -502,9 +497,7 @@ app.delete("/reviews/:id", async (req, res) => {
     res.status(401).send("Unauthorized");
     return;
   }
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let userId = decoded.userId;
+  let userId = getUserIdFromToken(req.headers.authorization);
   //deleting a review
   let reviewId = req.params.id;
   try {
@@ -528,10 +521,7 @@ app.get("/users/:id/reviews", async (req, res) => {
     res.status(401).send("Unauthorized");
     return;
   }
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let toeknUserId = decoded.userId;
-  let userId = req.params.id;
+  let userId = getUserIdFromToken(req.headers.authorization);
   if (userId != toeknUserId) {
     res.status(403).send("Forbidden");
     return;
@@ -553,18 +543,22 @@ app.get("/users/:id/reviews", async (req, res) => {
   }
 });
 
-app.post("/photos", async (req, res) => {
+app.post("/photos", upload.single("photo"), async (req, res) => {
   if (req.headers.authorization == null) {
     res.status(401).send("Unauthorized");
     return;
   }
   //creating a photo
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let userId = decoded.userId;
+  let userId = getUserIdFromToken(req.headers.authorization);
+  let photoBuffer = req.file.buffer;
+  if (photoBuffer == null || photoBuffer.length > 64 * 1024 * 1024) {
+    res.status(400).send("Photo too large!");
+    return;
+  }
   let photo = {
     businessId: req.body.businessId,
-    photo: req.body.photo,
+    userId: userId,
+    photo: photoBuffer,
     caption: req.body.caption,
   };
   if (!validateImage(photo)) {
@@ -580,10 +574,52 @@ app.post("/photos", async (req, res) => {
         res.status(500).send("Internal server error");
       }
       res.status(201).send("Photo created");
+      return;
     } catch (err) {
       console.error(err);
       res.status(500).send("Internal server error");
+      return;
     }
+  }
+});
+
+app.get("/photos/:Id", async (req, res) => {
+  if (req.headers.authorization == null) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+  let userId = getUserIdFromToken(req.headers.authorization);
+  if (userId == null) {
+    res.status(403).send("Forbidden");
+    return;
+  }
+  let photoId = req.params.Id.split(".")[0];
+  let photoType = req.params.Id.split(".")[1];
+
+  try {
+    let [results] = await mysqlPool.query("SELECT * FROM photos WHERE Id = ?", [
+      photoId,
+    ]);
+    if (results.length == 0) {
+      res.status(404).send("Photo not found");
+      return;
+    }
+
+    // Assuming the photo is stored in a 'photo' column as a binary data
+    const photo = results[0].photo;
+
+    // Set the appropriate headers
+    res.setHeader("Content-Type", "image/" + photoType);
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=" + photoId + "." + photoType
+    );
+
+    // Send the photo as a file
+    res.send(photo);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Internal server error");
   }
 });
 
@@ -615,9 +651,7 @@ app.get("/users/:id/businesses", async (req, res) => {
     return;
   }
   //get a users businesses
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let tokenUserId = decoded.userId;
+  let tokenUserId = getUserIdFromToken(req.headers.authorization);
   let userId = req.params.id;
   if (userId != tokenUserId) {
     res.status(403).send("Forbidden");
@@ -645,9 +679,7 @@ app.get("/users/:id/photos", async (req, res) => {
     res.status(401).send("Unauthorized");
     return;
   }
-  let token = req.headers.authorization.split(" ")[1];
-  let decoded = jwt.verify(token, process.env.JWT_SECRET);
-  let tokenUserId = decoded.userId;
+  let tokenUserId = getUserIdFromToken(req.headers.authorization);
   let userId = req.params.id;
   if (userId != tokenUserId) {
     res.status(403).send("Forbidden");
