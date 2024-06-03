@@ -7,19 +7,14 @@ dotenv.config({ path: "./.env" });
 const port = process.env.PORT;
 //db
 const mysql = require("mysql2/promise");
-const mysqlHost = process.env.MYSQL_HOST || "localhost";
-const mysqlPort = process.env.MYSQL_PORT || "3306";
-const mysqlDB = process.env.MYSQL_DATABASE;
-const mysqlUser = process.env.MYSQL_USER;
-const mysqlPassword = process.env.MYSQL_PASSWORD;
 const maxMySQLConnections = 10;
 const mysqlPool = mysql.createPool({
   connectionLimit: maxMySQLConnections,
-  host: mysqlHost,
-  port: mysqlPort,
-  database: mysqlDB,
-  user: mysqlUser,
-  password: mysqlPassword,
+  host: process.env.MYSQL_HOST,
+  port: process.env.MYSQL_PORT,
+  database: process.env.MYSQL_DATABASE,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
 });
 // module.exports = mysqlPool;
 //session/token
@@ -27,10 +22,17 @@ const jwt = require("jsonwebtoken");
 //password ecryption
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
-//Image handling (multer, sharp)
+//Image handling (multer, sharp, image-size)
 const multer = require("multer");
 const upload = multer();
 const sharp = require("sharp");
+const sizeOf = require("image-size");
+//RabbitMQ
+const amqp = require("amqplib");
+let rabbitmqHost = process.env.RABBITMQ_HOST;
+let rabbitmqUser = process.env.RABBITMQ_DEFAULT_USER;
+let rabbitmqPass = process.env.RABBITMQ_DEFAULT_PASS;
+let rabbitmqUrl = `amqp://${rabbitmqUser}:${rabbitmqPass}@${rabbitmqHost}`;
 //database init
 const initDb = async () => {
   const sqlQueries = [
@@ -76,6 +78,13 @@ const initDb = async () => {
       \`userId\` int(11) NOT NULL,
       \`photo\` MEDIUMBLOB NOT NULL,
       \`caption\` varchar(255) NOT NULL,
+      \`thumbId\` int(11),
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;`,
+    `CREATE TABLE IF NOT EXISTS \`thumbnails\` (
+      \`id\` int(11) NOT NULL AUTO_INCREMENT,
+      \`photoId\` int(11) NOT NULL,
+      \`thumb\` BLOB NOT NULL,
       PRIMARY KEY (\`id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;`,
   ];
@@ -94,7 +103,7 @@ let ranDb = false;
 if (!ranDb) {
   setTimeout(() => {
     initDb();
-  }, 2000);
+  }, 5000);
   ranDb = true;
 }
 
@@ -142,7 +151,7 @@ function validateBusiness(business) {
 
 function validateImage(image) {
   for (let key in imageDefiner) {
-    if (image[key] == null && imageDefiner[key]) {
+    if ((image[key] == null || image[key] == undefined) && imageDefiner[key]) {
       return false;
     }
   }
@@ -166,6 +175,12 @@ function getUserIdFromToken(authorization) {
   let token = authorization.split(" ")[1];
   let decoded = jwt.verify(token, process.env.JWT_SECRET);
   return decoded.userId;
+}
+
+async function getChannel() {
+  const connection = await amqp.connect(rabbitmqUrl);
+  const channel = await connection.createChannel();
+  return channel;
 }
 
 app.post("/users", async (req, res) => {
@@ -408,6 +423,7 @@ app.get("/businesses/:Id", async (req, res) => {
     );
     if (rows.length == 0) {
       res.status(404).send("Business not found");
+      return;
     }
     res.status(200).send({ business: rows });
   } catch (err) {
@@ -517,12 +533,13 @@ app.delete("/reviews/:id", async (req, res) => {
 });
 
 app.get("/users/:id/reviews", async (req, res) => {
+  let userId = req.params.id;
   if (req.headers.authorization == null) {
     res.status(401).send("Unauthorized");
     return;
   }
-  let userId = getUserIdFromToken(req.headers.authorization);
-  if (userId != toeknUserId) {
+  let tokenUserId = getUserIdFromToken(req.headers.authorization);
+  if (userId != tokenUserId) {
     res.status(403).send("Forbidden");
     return;
   }
@@ -550,10 +567,18 @@ app.post("/photos", upload.single("photo"), async (req, res) => {
   }
   //creating a photo
   let userId = getUserIdFromToken(req.headers.authorization);
-  let photoBuffer = req.file.buffer;
+  let photoBuffer;
+  if (req.file && req.file.buffer) {
+    photoBuffer = req.file.buffer;
+  } else {
+    res.status(400).send("Invalid photo");
+    return;
+  }
+
   if (photoBuffer == null || photoBuffer.length > 64 * 1024 * 1024) {
     res.status(400).send("Photo too large!");
     return;
+    /* Tried to do server side resizing, but would never reach exit condition(small enough), but would still upload to db*/
   }
   let photo = {
     businessId: req.body.businessId,
@@ -572,9 +597,13 @@ app.post("/photos", upload.single("photo"), async (req, res) => {
       );
       if (result.affectedRows == 0) {
         res.status(500).send("Internal server error");
+      } else {
+        let id = result.insertId;
+        const channel = await getChannel();
+        channel.sendToQueue("images", Buffer.from(id.toString()));
+
+        res.status(201).send("Photo created");
       }
-      res.status(201).send("Photo created");
-      return;
     } catch (err) {
       console.error(err);
       res.status(500).send("Internal server error");
@@ -605,10 +634,47 @@ app.get("/photos/:Id", async (req, res) => {
       return;
     }
 
-    // Assuming the photo is stored in a 'photo' column as a binary data
     const photo = results[0].photo;
 
-    // Set the appropriate headers
+    res.setHeader("Content-Type", "image/" + photoType);
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=" + photoId + "." + photoType
+    );
+
+    // Send the photo as a file
+    res.send(photo);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Internal server error");
+  }
+});
+
+app.get("/media/thumbs/:id", async (req, res) => {
+  if (req.headers.authorization == null) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+  let userId = getUserIdFromToken(req.headers.authorization);
+  if (userId == null) {
+    res.status(403).send("Forbidden");
+    return;
+  }
+  let photoId = req.params.id.split(".")[0];
+  let photoType = req.params.id.split(".")[1];
+
+  try {
+    let [results] = await mysqlPool.query(
+      "SELECT thumb FROM thumbnails WHERE photoId = ?",
+      [photoId]
+    );
+    if (results.length == 0) {
+      res.status(404).send("Photo not found");
+      return;
+    }
+
+    const photo = results[0].thumb;
+
     res.setHeader("Content-Type", "image/" + photoType);
     res.setHeader(
       "Content-Disposition",

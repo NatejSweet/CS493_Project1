@@ -1,0 +1,6 @@
+FROM node
+WORKDIR /usr/src/app
+COPY package*.json ./
+COPY . .
+RUN npm install
+RUN apt-get update && apt-get install -y netcat-openbsd

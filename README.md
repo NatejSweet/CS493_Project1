@@ -10,6 +10,19 @@
 
         docker compose up
 
+## .ENV Template
+
+    PORT =
+    MYSQL_DATABASE=
+    MYSQL_USER=
+    MYSQL_PASSWORD=
+    MYSQL_ROOT_PASSWORD=
+    JWT_SECRET=
+    MONGO_URL = 'mongodb://localhost:27017/'
+    RABBITMQ_DEFAULT_USER =
+    RABBITMQ_DEFAULT_PASS =
+    RABBITMQ_HOST =
+
 ## Creating a Business
 
     Request:

@@ -52,5 +52,13 @@ CREATE TABLE IF NOT EXISTS `images` (
   `userId` int(11) NOT NULL,
   `photo`  VARCHAR(24) NOT NULL,
   `caption` varchar(255) NOT NULL,
+  `thumbId` int(11) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE IF NOT EXISTS `thumbnails` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `imageId` int(11) NOT NULL,
+  `thumb`  VARCHAR(24) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;

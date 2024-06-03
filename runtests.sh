@@ -127,11 +127,11 @@ printf "\n"
 
 status 'POST a new photo should return success'
 curl -X POST \
-    -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $TOKEN" \
-    -d '{"businessId": 1, "photo": "photoURL", "caption": "A caption"}' \
+    -F "businessId=1" \
+    -F "caption=Your caption" \
+    -F "photo=@$(pwd)/Kragmaer_Map.png" \
     http://localhost:8000/photos
-    printf "\n"
 
 status 'POST an impropper photo should return bad request'
 curl -X POST \
@@ -147,22 +147,44 @@ curl     -H 'Content-Type: application/json' \
     http://localhost:8000/users/1/businesses
 printf "\n"
 
-status 'GET all photos for a user by id should return at least one photo'
-curl     -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $TOKEN" \
-    http://localhost:8000/users/1/photos
-printf "\n"
-
 status 'GET all reviews for a business by id should return at least one review'
 curl     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $TOKEN" \
     http://localhost:8000/businesses/1/reviews
 printf "\n"
 
-status 'GET all photos for a business by id should return at least one photo'
-curl     -H 'Content-Type: application/json' \
+status "Downloading JPG image\n"
+curl -X GET \
     -H "Authorization: Bearer $TOKEN" \
-    http://localhost:8000/businesses/1/photos
+    http://localhost:8000/photos/1.jpg > testphoto.jpg
+
+status "Downloading PNG image\n"
+curl -X GET \
+    -H "Authorization: Bearer $TOKEN" \
+    http://localhost:8000/photos/1.png > testphoto.png
+
+status "Downloading  JPG thumbnail\n"
+curl -X GET \
+    -H "Authorization: Bearer $TOKEN" \
+    http://localhost:8000/media/thumbs/1.jpg > testthumb.jpg
+
+status "Downloading  PNG thumbnail\n"
+curl -X GET \
+    -H "Authorization: Bearer $TOKEN" \
+    http://localhost:8000/media/thumbs/1.png > testthumb.png
+
+#These are commented out because they return an image buffer which floods the commandline, not allowing for previous tests to be looked at
+
+# status 'GET all photos for a business by id should return at least one photo'
+# curl     -H 'Content-Type: application/json' \
+#     -H "Authorization: Bearer $TOKEN" \
+#     http://localhost:8000/businesses/1/photos
+
+# status 'GET all photos for a user by id should return at least one photo'
+# curl     -H 'Content-Type: application/json' \
+#     -H "Authorization: Bearer $TOKEN" \
+#     http://localhost:8000/users/1/photos
+# printf "\n"
 
 status 'DELETE a business should return no content'
 curl -X DELETE \

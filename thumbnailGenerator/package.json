@@ -1,0 +1,16 @@
+{
+  "name": "thumbnail_generator",
+  "version": "1.0.0",
+  "description": "consumer for rabbitmq server",
+  "main": "thumbnailGenerator.js",
+  "scripts": {
+    "start": "node thumbnailGenerator.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "image-size": "^1.1.1",
+    "mysql2": "^3.9.7",
+    "dotenv": "^16.4.5",
+    "sharp": "^0.33.4"
+  }
+}
